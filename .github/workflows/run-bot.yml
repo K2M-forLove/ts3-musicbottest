@@ -22,15 +22,9 @@ jobs:
       - name: Force Gradle to use Java 17
         run: |
           echo "JAVA_HOME=$JAVA_HOME"
-          echo "PATH=$PATH"
-          which java
           java -version
-
-          export GRADLE_JAVA_HOME="$JAVA_HOME"
-
-          echo "GRADLE_JAVA_HOME=$GRADLE_JAVA_HOME" >> "$GITHUB_ENV"
-
           chmod +x gradlew
+          echo "GRADLE_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
 
           ./gradlew --version \
             -Dorg.gradle.java.home="$JAVA_HOME"
@@ -41,6 +35,7 @@ jobs:
           sudo apt-get install -y \
             xvfb \
             x11-utils \
+            xdotool \
             mesa-utils \
             libgtk-3-0 \
             libgtk-3-dev \
@@ -76,19 +71,20 @@ jobs:
             https://files.teamspeak-services.com/releases/client/3.6.2/TeamSpeak3-Client-linux_amd64-3.6.2.run
 
           chmod +x teamspeak.run
+
           ./teamspeak.run --accept
 
           echo "$PWD/TeamSpeak3-Client-linux_amd64" >> "$GITHUB_PATH"
 
       - name: Check TeamSpeak installation
         run: |
-          echo "TeamSpeak installation:"
+          echo "TeamSpeak files:"
           find "$PWD/TeamSpeak3-Client-linux_amd64" \
             -maxdepth 2 -type f 2>/dev/null | head -50 || true
 
           echo "TeamSpeak executable:"
           find "$PWD/TeamSpeak3-Client-linux_amd64" -type f \
-            \( -name "ts3client_linux_amd64" -o -name "teamspeak3" \) \
+            \( -name "ts3client_linux_amd64" -o -name "ts3client_runscript.sh" \) \
             -print 2>/dev/null || true
 
       - name: Build TS3 MusicBot
@@ -120,11 +116,88 @@ jobs:
             &
 
           echo $! > /tmp/xvfb.pid
-
           sleep 5
 
           echo "DISPLAY=$DISPLAY"
           xdpyinfo -display :99 | head -30
+
+      - name: Start TeamSpeak Client and accept client license
+        env:
+          DISPLAY: :99
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          TS_DIR="$PWD/TeamSpeak3-Client-linux_amd64"
+
+          if [ ! -f "$TS_DIR/ts3client_runscript.sh" ]; then
+            echo "ERROR: TeamSpeak run script was not found."
+            exit 1
+          fi
+
+          chmod +x "$TS_DIR/ts3client_runscript.sh"
+
+          echo "Starting TeamSpeak Client..."
+          cd "$TS_DIR"
+
+          ./ts3client_runscript.sh --no-sandbox > /tmp/teamspeak.log 2>&1 &
+          TS_PID=$!
+
+          echo "$TS_PID" > /tmp/teamspeak.pid
+
+          cd "$GITHUB_WORKSPACE"
+
+          echo "Waiting for TeamSpeak license window..."
+
+          ACCEPTED=0
+
+          for i in $(seq 1 60); do
+            WINDOW_IDS=$(xdotool search --onlyvisible --name ".*TeamSpeak.*" 2>/dev/null || true)
+
+            if [ -n "$WINDOW_IDS" ]; then
+              echo "TeamSpeak window detected."
+
+              for WINDOW_ID in $WINDOW_IDS; do
+                xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null || true
+
+                # Move the license viewer to the end, then select "I accept".
+                xdotool key --window "$WINDOW_ID" End 2>/dev/null || true
+                sleep 1
+                xdotool key --window "$WINDOW_ID" Tab 2>/dev/null || true
+                sleep 1
+                xdotool key --window "$WINDOW_ID" Return 2>/dev/null || true
+              done
+
+              sleep 5
+
+              if grep -qi "accept" /tmp/teamspeak.log 2>/dev/null; then
+                echo "TeamSpeak reported license-related output."
+              fi
+
+              ACCEPTED=1
+              break
+            fi
+
+            sleep 2
+          done
+
+          echo "TeamSpeak startup log:"
+          cat /tmp/teamspeak.log || true
+
+          if [ "$ACCEPTED" -ne 1 ]; then
+            echo "WARNING: TeamSpeak license window was not detected."
+            echo "The MusicBot may still start if the client license was already accepted."
+          fi
+
+          sleep 5
+
+      - name: Check TeamSpeak process
+        env:
+          DISPLAY: :99
+        run: |
+          echo "TeamSpeak processes:"
+          ps aux | grep -i teamspeak | grep -v grep || true
+
+          echo "TeamSpeak log:"
+          cat /tmp/teamspeak.log 2>/dev/null || true
 
       - name: Check OpenGL
         env:
