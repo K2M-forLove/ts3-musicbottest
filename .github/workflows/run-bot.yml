@@ -12,20 +12,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java 11
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '11'
           cache: gradle
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            openjfx \
             xvfb \
             x11-utils \
+            mesa-utils \
             libgtk-3-0 \
             libgtk-3-dev \
             libgl1-mesa-dri \
@@ -74,17 +74,17 @@ jobs:
 
       - name: Check TeamSpeak installation
         run: |
-          echo "TeamSpeak files:"
+          echo "TeamSpeak installation:"
           find "$PWD/TeamSpeak3-Client-linux_amd64" -maxdepth 2 -type f 2>/dev/null | head -50 || true
 
-          echo "Searching for TeamSpeak executable:"
+          echo "TeamSpeak executable:"
           find "$PWD/TeamSpeak3-Client-linux_amd64" -type f \
             \( -name "ts3client_linux_amd64" -o -name "teamspeak3" \) \
             -print 2>/dev/null || true
 
       - name: Build TS3 MusicBot
         run: |
-          ./gradlew assemble --no-daemon --stacktrace --info
+          ./gradlew clean assemble --no-daemon --stacktrace
 
       - name: Check built files
         run: |
@@ -110,7 +110,7 @@ jobs:
           echo "DISPLAY=$DISPLAY"
           xdpyinfo -display :99 | head -30
 
-      - name: Check OpenGL software rendering
+      - name: Check OpenGL
         env:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
@@ -146,27 +146,12 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GDK_BACKEND: x11
           GTK_USE_PORTAL: "0"
-          JAVA_TOOL_OPTIONS: "-Dprism.order=sw -Dprism.verbose=true -Djavafx.platform=gtk"
+          JAVA_TOOL_OPTIONS: "-Dprism.order=sw -Dprism.verbose=true"
         run: |
-          JAR=$(find app/build/libs -maxdepth 1 -type f -name "*.jar" | head -n 1)
+          echo "Starting TS3 MusicBot with Gradle..."
 
-          if [ -z "$JAR" ]; then
-            echo "ERROR: MusicBot JAR was not found."
-            exit 1
-          fi
-
-          echo "Starting: $JAR"
-          echo "DISPLAY=$DISPLAY"
-          echo "JAVA_HOME=$JAVA_HOME"
-
-          java \
-            -Dprism.order=sw \
-            -Dprism.verbose=true \
-            -Djavafx.platform=gtk \
-            -Dglass.platform=gtk \
-            --module-path /usr/share/openjfx/lib \
-            --add-modules javafx.controls,javafx.graphics,javafx.fxml \
-            -server \
-            -jar "$JAR" \
-            --config ts3-musicbot.config \
-            --accept-ts-license
+          ./gradlew run \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            --args="--config ts3-musicbot.config --accept-ts-license"
