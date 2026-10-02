@@ -47,9 +47,19 @@ jobs:
         run: |
           wget -O teamspeak.run \
             https://files.teamspeak-services.com/releases/client/3.6.2/TeamSpeak3-Client-linux_amd64-3.6.2.run
+
           chmod +x teamspeak.run
-          ./teamspeak.run --accept-license
+
+          ./teamspeak.run --accept
+
           echo "$PWD/TeamSpeak3-Client-linux_amd64" >> "$GITHUB_PATH"
+
+      - name: Check TeamSpeak installation
+        run: |
+          echo "PATH=$PATH"
+          find "$PWD" -maxdepth 3 -type f -name "ts3client_linux_amd64" -o -name "teamspeak3" 2>/dev/null || true
+          which ts3client_linux_amd64 || true
+          which teamspeak3 || true
 
       - name: Build TS3 MusicBot
         run: |
