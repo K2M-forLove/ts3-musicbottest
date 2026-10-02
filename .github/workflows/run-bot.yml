@@ -84,7 +84,7 @@ jobs:
 
       - name: Build TS3 MusicBot
         run: |
-          ./gradlew clean assemble --no-daemon
+          ./gradlew assemble --no-daemon --stacktrace --info
 
       - name: Check built files
         run: |
